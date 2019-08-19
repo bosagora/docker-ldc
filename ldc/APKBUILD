@@ -1,0 +1,123 @@
+# -*- shell-script -*-
+# Contributor: Mathias LANG <pro.mathias.lang@gmail.com>
+# Maintainer: Mathias LANG <pro.mathias.lang@gmail.com>
+#
+# This package is divided between the actual package,
+# and the two subpackages, `static` and `runtime`.
+# The main package depends on them.
+# A user might want to install `runtime` when they have
+# a dynamically-linked D program.
+pkgname="ldc"
+pkgver="1.16.0"
+pkgrel=0
+pkgdesc="The LLVM-based D Compiler"
+url="https://github.com/ldc-developers/ldc"
+arch="x86_64"
+license="BSD-3-Clause; Some parts BSL-1.0; Some parts Artistic-1.0 or GPL-2.0-or-later; Some parts NCSA; Some parts NCSA and MIT"
+depends="binutils-gold libexecinfo"
+makedepends="cmake dlang-compiler llvm5-dev llvm5-static curl-dev libedit-dev libexecinfo-static zlib-dev"
+install=""
+subpackages="$pkgname-runtime $pkgname-doc $pkgname-static"
+provides="dlang-compiler"
+source="https://github.com/ldc-developers/ldc/releases/download/v$pkgver/ldc-$pkgver-src.tar.gz
+		ldc2.package.conf"
+builddir="$srcdir/"
+
+build() {
+    rootdir="${srcdir}/ldc-$pkgver-src/"
+	cd "${rootdir}"
+	if [ "$CBUILD" != "$CHOST" ]; then
+		CMAKE_CROSSOPTS="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_HOST_SYSTEM_NAME=Linux"
+	fi
+	cmake \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DBUILD_SHARED_LIBS=True \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+		-DCMAKE_C_FLAGS="$CFLAGS" \
+		-DLLVM_CONFIG=$(which llvm5-config) \
+		${CMAKE_CROSSOPTS} "${rootdir}"
+	make
+
+	# CMake added the rpaths to the shared libs - strip them
+	chrpath -d "${rootdir}"/lib/*.so*
+	:
+}
+
+check() {
+	root="$srcdir/ldc-$pkgver-src/"
+	#libroot="$srcdir/ldc-runtime-build/lib/"
+
+	echo 'import std.stdio; void main () { try throw new Exception(null); catch (Exception) writeln("Hello World!"); }' > hello_world.d
+	if [ "$(${root}/bin/ldmd2 -run hello_world.d)" != "Hello World!" ]; then
+		return 1
+	fi
+	:
+}
+
+package() {
+	depends="$pkgname-runtime $pkgname-static"
+	rootdir="$srcdir/ldc-$pkgver-src/"
+	importdir="${pkgdir}/usr/include/dlang/${pkgname}-${pkgver}/"
+
+	install -s -D "${rootdir}/bin/ldc2"	 "$pkgdir"/usr/bin/ldc2
+	install -s -D "${rootdir}/bin/ldmd2" "$pkgdir"/usr/bin/ldmd2
+
+	mkdir -p "${pkgdir}/etc/"
+	sed -e "s~\$pkgdir~${pkgdir}~g" "${srcdir}/ldc2.package.conf" > "${pkgdir}/etc/ldc2.conf"
+
+	install -D "${rootdir}/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+	# Install LDC import files
+	for impfile in $(find "${rootdir}/runtime/jit-rt/d/" -name "*.d*");
+	do
+		target="${impfile##*jit-rt/d/}"
+		install -D "${impfile}" "${rootdir}/runtime/${target}"
+	done
+
+	# Install Druntime import files
+	install -D "${rootdir}/runtime/druntime/src/object.d" "${importdir}/object.d"
+	for importpkg in "core" "etc" "gc" "ldc" "rt";
+	do
+		cp -R "${rootdir}/runtime/druntime/src/${importpkg}/" "${importdir}/"
+	done
+
+	# Install Phobos import files
+	for importpkg in "etc" "std";
+	do
+		cp -R "${rootdir}/runtime/phobos/${importpkg}/" "${importdir}/"
+	done
+
+	# Install the static & shared runtime libraries
+	mkdir -p "$pkgdir/usr/lib/"
+	cp -R "${rootdir}"/lib/* "$pkgdir/usr/lib/"
+}
+
+runtime() {
+	depends="libexecinfo-dev"
+	pkgdesc="Dynamic runtime library for D code compiled with ${pkgname}-${pkgver}"
+
+	mkdir -p "$subpkgdir"/usr/lib/
+	for libn in "libdruntime" "libphobos2";
+	do
+		mv "${pkgdir}"/usr/lib/${libn}-ldc-shared.so* "${subpkgdir}/usr/lib/"
+		#ln -s "${libn}-ldc-shared.so.2.0.78" "$pkgdir/usr/lib/${libn}-ldc-shared.so.78"
+		#ln -s "${libn}-ldc-shared.so.2.0.78" "$pkgdir/usr/lib/${libn}-ldc-shared.so"
+	done
+	mv "${pkgdir}"/usr/lib/libldc-jit.so* "${subpkgdir}/usr/lib"
+
+	mv "${pkgdir}"/usr/lib/*.so* "${subpkgdir}"/usr/lib/
+	:
+}
+
+static() {
+	depends="libexecinfo-static"
+	pkgdesc="$pkgdesc (static library)"
+
+	mkdir -p "$subpkgdir"/usr/lib/
+	mv "$pkgdir"/usr/lib/*.a "$subpkgdir"/usr/lib/
+}
+
+sha512sums="afd9675ce0929a8acb1084becb47d2d30d40fcd3836a55713a9ac128d12764b7eefb5e04c2eae432c4e138aa64c3d8d248745dcfeb2fa134f66fb11ddc30743e  ldc-1.16.0-src.tar.gz
+1e3f81c96b5a36b784437a4d44814b528680724baa25aa337bdaa1f8d5f9a843f2b67cfa711eb0a9f2f9aef746562489e91336b18d4b939014dc6ce126463cef  ldc2.package.conf"
