@@ -1,5 +1,5 @@
 # Builds LDC 1.16.0
-FROM bpfk/pkgbuilder:latest AS Builder
+FROM bpfk/pkgbuilder:v3.10.1 AS Builder
 # Install previous LDC (1.8.0, FE 2.078.3)
 RUN sudo apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/testing ldc
 # Copy package and build
