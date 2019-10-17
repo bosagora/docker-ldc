@@ -5,11 +5,7 @@ RUN sudo apk --no-cache add binutils-gold \
     libedit-dev \
     libexecinfo-dev libexecinfo-static zlib-dev
 # Install previous LDC (1.8.0, FE 2.078.3)
-COPY --from=bpfk/ldc:bootstrap-latest /root/packages/ /root/packages/
-RUN sudo apk --no-cache add /root/packages/effortman/x86_64/ldc-1.8.0-r0.apk \
-    /root/packages/effortman/x86_64/ldc-runtime-1.8.0-r0.apk \
-    /root/packages/effortman/x86_64/ldc-static-1.8.0-r0.apk \
-    && sudo rm -rf /root/packages/
+RUN sudo apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/testing ldc
 # Copy package and build
 ADD --chown=effortman:abuild ldc/ /home/effortman/ldc/
 WORKDIR /home/effortman/ldc/
