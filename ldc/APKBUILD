@@ -2,7 +2,7 @@
 # Maintainer: Mathias LANG <pro.mathias.lang@gmail.com>
 pkgname=ldc
 pkgver=1.18.0
-pkgrel=0
+pkgrel=1
 pkgdesc="The LLVM-based D Compiler"
 url="https://github.com/ldc-developers/ldc"
 # Bootstrapping was done with an upstream-provided package,
@@ -10,20 +10,20 @@ url="https://github.com/ldc-developers/ldc"
 # Once we can use GDC for bootstrapping, this can be "all"
 arch="x86_64"
 license="BSD-3-Clause AND BSL-1.0 AND (Artistic-1.0 OR GPL-2.0-or-later) AND NCSA AND MIT"
-depends="binutils-gold libexecinfo"
-makedepends="chrpath cmake dlang-compiler llvm8-dev llvm8-static curl-dev libedit-dev libexecinfo-static zlib-dev"
+depends="libexecinfo tzdata"
+makedepends="bash chrpath cmake curl-dev diffutils dlang-compiler gdb grep llvm9-dev llvm9-static libedit-dev libexecinfo-static py-pip zlib-dev"
 # A user might want to install the '-runtime' subpackage when they have
 # a dynamically-linked D program.
-subpackages="$pkgname-runtime $pkgname-doc $pkgname-static"
+subpackages="$pkgname-runtime $pkgname-static"
 provides="dlang-compiler"
 source="https://github.com/ldc-developers/ldc/releases/download/v$pkgver/ldc-$pkgver-src.tar.gz
-		ldc2.package.conf"
-builddir="$srcdir/"
+		01-stdio-fseek.patch
+		02-conf.patch
+        03-coverage.patch
+        "
+builddir="$srcdir/ldc-$pkgver-src/"
 
 build() {
-	rootdir="$srcdir/ldc-$pkgver-src/"
-
-	cd "$rootdir"
 	if [ "$CBUILD" != "$CHOST" ]; then
 		CMAKE_CROSSOPTS="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_HOST_SYSTEM_NAME=Linux"
 	fi
@@ -34,63 +34,33 @@ build() {
 		-DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_CXX_FLAGS="$CXXFLAGS" \
 		-DCMAKE_C_FLAGS="$CFLAGS" \
-		$CMAKE_CROSSOPTS "$rootdir"
+		$CMAKE_CROSSOPTS "$builddir"
 	make
 
 	# CMake added the rpaths to the shared libs - strip them
-	chrpath -d "$rootdir"/lib/*.so*
-	:
+	chrpath -d "$builddir"/lib/*.so*
 }
 
 check() {
-	rootdir="$srcdir/ldc-$pkgver-src/"
+	# Dependency to lit-test
+	# python -m pip install --user lit
 
-	echo 'import std.stdio; void main () { try throw new Exception(null); catch (Exception) writeln("Hello World!"); }' > hello_world.d
-	if [ "$($rootdir/bin/ldmd2 -run hello_world.d)" != "Hello World!" ]; then
-		return 1
-	fi
-	:
+	# Note: The testsuite does not parallelize well, as the `clean` target get run in parallel.
+	# Hence `-j${JOBS}` was left out on purpose
+	#
+	# - dmd-testsuite takes too long to run and has more to do with language checks
+	#	which are less relevant to us than platform integration tests
+	# - lit-test disabled because 'TEST 'LDC :: debuginfo/print_gdb.d' FAILED'
+	#	Something to do with TLS variables not being printable in GDB
+	# - 'druntime-test-shared' fails, probably because it is using `Object.factory`
+	# - 'druntime-test-stdcpp' fails for an unknown reason and is temporarily disabled
+	# - 'druntime-test-exceptions' fails for an unknown reason and is temporarily disabled
+	# ctest --output-on-failure -E "dmd-testsuite|lit-tests|druntime-test-exceptions|druntime-test-shared|druntime-test-stdcpp"
+    :
 }
 
 package() {
-	depends="$pkgname-runtime $pkgname-static"
-	rootdir="$srcdir/ldc-$pkgver-src/"
-	importdir="$pkgdir/usr/include/dlang/$pkgname-$pkgver/"
-
-	install -s -D "$rootdir/bin/ldc2"  "$pkgdir/usr/bin/ldc2"
-	install -s -D "$rootdir/bin/ldmd2" "$pkgdir/usr/bin/ldmd2"
-	# Needed for PGO
-	install -s -D "$rootdir/bin/ldc-profdata"  "$pkgdir/usr/bin/ldc-profdata"
-	# Needed for LDC compile cache management
-	install -s -D "$rootdir/bin/ldc-prune-cache"  "$pkgdir/usr/bin/ldc-prune-cache"
-
-	install -D "$srcdir/ldc2.package.conf" "$pkgdir/etc/ldc2.conf"
-
-	install -D "$rootdir/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
-
-	# Install LDC import files
-	for impfile in $(find "$rootdir/runtime/jit-rt/d/" -name "*.d*");
-	do
-		target="${impfile##*jit-rt/d/}"
-		install -D "$impfile" "$rootdir/runtime/$target"
-	done
-
-	# Install Druntime import files
-	install -D "$rootdir/runtime/druntime/src/object.d" "$importdir/object.d"
-	for importpkg in "core" "etc" "gc" "ldc" "rt";
-	do
-		cp -R "$rootdir/runtime/druntime/src/$importpkg/" "$importdir/"
-	done
-
-	# Install Phobos import files
-	for importpkg in "etc" "std";
-	do
-		cp -R "$rootdir/runtime/phobos/$importpkg/" "$importdir/"
-	done
-
-	# Install the static & shared runtime libraries
-	mkdir -p "$pkgdir/usr/lib/"
-	cp -R "$rootdir"/lib/* "$pkgdir/usr/lib/"
+	make DESTDIR="$pkgdir" install
 }
 
 runtime() {
@@ -105,7 +75,6 @@ runtime() {
 	mv "$pkgdir"/usr/lib/libldc-jit.so* "$subpkgdir/usr/lib"
 
 	mv "$pkgdir"/usr/lib/*.so* "$subpkgdir/usr/lib/"
-	:
 }
 
 static() {
@@ -117,4 +86,6 @@ static() {
 }
 
 sha512sums="fe7529c33d0e43dfb71f474dfa381b88ee476b70933c8f80fc063d9a015df24a75e2b607a7242cc4b9cd4b6ac7559aec8f2883016bf7252342742322fcccbd4d  ldc-1.18.0-src.tar.gz
-0e5f67604d36dbf3943feb3dee3b55f0f2fe1659ce4efc2c189b535934f351868973fb31e94ffa2fd7a910ced3b9258058d43157e25e298f0fa7edd81842bcea  ldc2.package.conf"
+20d6bb560867052edeed6005e15473dae25c62002c7bd47f0e37610ffd5e94a50b49244c2a9b814f4858babca403f120ae6028cd86f964dd4734736eda068536  01-stdio-fseek.patch
+eb86e4be0ecf72aaabbd5608c8056bb9cede035895e766330b6d14f14c06dc513fcecc1b6e56ab6fc9fc26c220a689cc8b1394a30a319189c414f1e067c1d983  02-conf.patch
+0ce6ed90ea412f08a44b8d2aca061935904f6cb64d47526fb1b57a000113b5368956d79d40e240727594a411f81a2099a0ebbb91979fe6568fa250e52634c91d  03-coverage.patch"

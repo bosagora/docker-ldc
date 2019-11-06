@@ -1,7 +1,6 @@
-# Builds LDC 1.16.0
-FROM bpfk/pkgbuilder:v3.10.1 AS Builder
-# Install previous LDC (1.8.0, FE 2.078.3)
-RUN sudo apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/testing ldc
+# Builds a custom LDC
+FROM bpfk/pkgbuilder:latest AS Builder
+RUN sudo apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/testing ldc ldc-static
 # Copy package and build
 ADD --chown=effortman:abuild ldc/ /home/effortman/ldc/
 WORKDIR /home/effortman/ldc/
