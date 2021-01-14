@@ -132,7 +132,7 @@ package() {
 }
 
 runtime() {
-	depends="libexecinfo-dev"
+	depends="llvm-libunwind-dev"
 	pkgdesc="Dynamic runtime library for D code compiled with $pkgname-$pkgver"
 
 	mkdir -p "$subpkgdir/usr/lib/"
@@ -146,7 +146,7 @@ runtime() {
 }
 
 static() {
-	depends="libexecinfo-static"
+	depends="llvm-libunwind-static"
 	pkgdesc="$pkgdesc (static library)"
 
 	mkdir -p "$subpkgdir/usr/lib/"
