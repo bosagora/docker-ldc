@@ -2,7 +2,7 @@
 FROM bpfk/pkgbuilder:latest AS Builder
 ADD --chown=effortman:abuild ldc/ /home/effortman/ldc/
 WORKDIR /home/effortman/ldc/
-RUN abuild -R
+RUN abuild -r
 
 # Now just copy the registry into a new image
 # We do not install it because it is unlikely that someone want to build with just the compiler
