@@ -29,7 +29,7 @@ prepare() {
     mkdir -p $srcdir
 
     if [ ! -d $builddir ]; then
-        git clone https://github.com/kinke/ldc.git -b backtrace $builddir || return 1
+        git clone https://github.com/ldc-developers/ldc.git $builddir || return 1
         cd $builddir
     else
         cd $builddir
@@ -60,6 +60,7 @@ build() {
 		-DCMAKE_CXX_FLAGS="$CXXFLAGS" \
 		-DCMAKE_C_FLAGS="$CFLAGS" \
 		-DD_COMPILER='gdmd' \
+		-DC_SYSTEM_LIBS="unwind;m;pthread;rt;dl" \
 		$CMAKE_CROSSOPTS -S "$builddir" -B "$builddir/stage1"
 	make -C "$builddir/stage1"
 
@@ -77,6 +78,7 @@ build() {
 		-DCMAKE_CXX_FLAGS="$CXXFLAGS" \
 		-DCMAKE_C_FLAGS="$CFLAGS" \
 		-DD_COMPILER="$builddir/stage1/bin/ldmd2" \
+		-DC_SYSTEM_LIBS="unwind;m;pthread;rt;dl" \
 		$CMAKE_CROSSOPTS "$builddir"
 	make
 
@@ -118,7 +120,7 @@ check() {
 	#	Something to do with TLS variables not being printable in GDB
 	# - 'druntime-test-shared' fails, probably because it is using 'Object.factory'
 	# - 'druntime-test-stdcpp' fails for an unknown reason and is temporarily disabled
-	# - 'druntime-test-exceptions' fails for an unknown reason and is temporarily disabled
+	# - 'druntime-test-exceptions' fails because we can't retrieve the function's name
 	ctest --output-on-failure -E "dmd-testsuite|lit-tests|druntime-test-exceptions|druntime-test-shared|druntime-test-stdcpp$_tests_ignore"
 }
 
